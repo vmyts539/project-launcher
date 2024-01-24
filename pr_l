@@ -1,0 +1,100 @@
+#!/usr/bin/env ruby
+
+require 'fileutils'
+require 'open3'
+
+# Arguments
+ARGV_SETUP = '--setup'.freeze
+ARGV_CLEAN = '--clean'.freeze
+
+# Paths
+PROJECTS_DATA_FOLDER = '/home/vmyts/.local/share/pr_l'.freeze
+PROJECTS_LIST_FILE_PATH = "#{PROJECTS_DATA_FOLDER}/projects.txt".freeze
+
+KITTY_PROJECT_SESSIONS_ROOT_PATH = '/home/vmyts/.config/kitty/pr_l'.freeze
+
+# Comands
+SCRAP_PROJECTS_COMMAND = %(find ~/ -type f -name 'Gemfile' -not -path '*/.*' -not -path '*/vendor/*' -exec dirname {} \\; | sort -u).freeze
+
+def create_dir(path, message = nil)
+  return if File.directory?(path)
+
+  puts message unless message.nil?
+  FileUtils.mkdir_p(path)
+end
+
+def delete_dir_and_data(path, message = nil)
+  return unless File.directory?(path)
+
+  puts message unless message.nil?
+  system("rm -rf #{path}")
+end
+
+def seed_projects # rubocop:disable Metrix/MethodLength
+  return if File.exist?(PROJECTS_LIST_FILE_PATH)
+
+  begin
+    stdout, stderr, status = Open3.capture3(SCRAP_PROJECTS_COMMAND)
+
+    if status.success?
+      File.open(PROJECTS_LIST_FILE_PATH, 'w') do |f|
+        puts "Caching paths: \n#{stdout}"
+        f.write(stdout)
+      end
+    else
+      puts "Error: #{stderr}"
+    end
+  rescue StandardError => e
+    puts "An error occured: #{e.message}"
+  end
+end
+
+def seed_session_configs # rubocop:disable Metrix/MethodLength
+  File.readlines(PROJECTS_LIST_FILE_PATH, chomp: true).each do |project_path|
+    name = project_path.split('/').last
+    file_path = "#{KITTY_PROJECT_SESSIONS_ROOT_PATH}/#{name}.conf"
+
+    next if File.file?(file_path)
+
+    File.open(file_path, 'w') do |f|
+      puts "Creating session config for: #{name}"
+
+      f.write(
+        <<~CONFIG.chomp
+          cd #{project_path}
+          launch nvim .
+          launch --title "#{name}"
+          launch rails s
+          layout tall:bias=70;full_size=1;mirrored=false
+        CONFIG
+      )
+    end
+  end
+end
+
+def setup
+  create_dir(PROJECTS_DATA_FOLDER, "Creating project's data folder")
+  seed_projects
+
+  create_dir(KITTY_PROJECT_SESSIONS_ROOT_PATH, 'Creating sessions config folder')
+  seed_session_configs
+end
+
+def clean
+  delete_dir_and_data(PROJECTS_DATA_FOLDER, "Deleting project's data folder")
+  delete_dir_and_data(KITTY_PROJECT_SESSIONS_ROOT_PATH, 'Deleting sessions config folder')
+end
+
+puts 'Please provide name of the project to launch' and return if ARGV.empty?
+
+clean and return if ARGV.include?(ARGV_CLEAN)
+
+setup if ARGV.include?(ARGV_SETUP)
+
+config_path = "#{KITTY_PROJECT_SESSIONS_ROOT_PATH}/#{ARGV.last}.conf"
+
+if File.file?(config_path)
+  exec("kitty --start-as fullscreen --session #{config_path}")
+else
+  puts 'No such project. Try again with "--setup" option'
+end
