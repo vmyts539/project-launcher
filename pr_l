@@ -30,7 +30,7 @@ def delete_dir_and_data(path, message = nil)
   system("rm -rf #{path}")
 end
 
-def seed_projects # rubocop:disable Metrix/MethodLength
+def seed_projects # rubocop:disable Metrics/MethodLength
   return if File.exist?(PROJECTS_LIST_FILE_PATH)
 
   begin
@@ -49,7 +49,7 @@ def seed_projects # rubocop:disable Metrix/MethodLength
   end
 end
 
-def seed_session_configs # rubocop:disable Metrix/MethodLength
+def seed_session_configs # rubocop:disable Metrics/MethodLength
   File.readlines(PROJECTS_LIST_FILE_PATH, chomp: true).each do |project_path|
     name = project_path.split('/').last
     file_path = "#{KITTY_PROJECT_SESSIONS_ROOT_PATH}/#{name}.conf"
